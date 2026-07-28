@@ -1,0 +1,84 @@
+name: Remove Botswana contact details
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  update-site:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Remove Botswana references
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          page = Path("index.html")
+          html = page.read_text(encoding="utf-8")
+          original = html
+
+          # Remove Botswana from the SEO description and hero coverage text.
+          html = html.replace("South Africa, Botswana, Zimbabwe", "South Africa, Zimbabwe")
+          html = re.sub(
+              r"South Africa,\s*\n\s*Botswana, Zimbabwe",
+              "South Africa,\n        Zimbabwe",
+              html,
+              count=1,
+          )
+
+          # Remove the complete Botswana office card.
+          html, office_count = re.subn(
+              r'\n\s*<div class="office">\s*\n\s*<div class="o-flag">Botswana</div>.*?\n\s*</div>\s*\n(?=\s*<div class="office">\s*\n\s*<div class="o-flag">Zimbabwe</div>)',
+              "\n",
+              html,
+              count=1,
+              flags=re.S,
+          )
+
+          # Remove the Botswana phone card from the quote section.
+          html, phone_card_count = re.subn(
+              r'\n\s*<a href="tel:\+26775377360">.*?<div><div class="cl">Call Us — Botswana</div><div class="cv">\+267 75 377 360</div></div>\s*</a>\s*\n',
+              "\n",
+              html,
+              count=1,
+              flags=re.S,
+          )
+
+          # Remove Botswana from the footer office and contact lists.
+          html = html.replace('        <a href="#offices">Pilane, Botswana</a>\n', "")
+          html = html.replace('        <a href="tel:+26775377360">+267 75 377 360</a>\n', "")
+
+          if office_count != 1:
+              raise SystemExit(f"Expected one Botswana office card, removed {office_count}")
+          if phone_card_count != 1:
+              raise SystemExit(f"Expected one Botswana phone card, removed {phone_card_count}")
+          if html == original:
+              raise SystemExit("No website changes were made")
+
+          forbidden = ["Botswana", "+267", "75377360", "Pilane", "Kgatleng", "Katleng", "Ramolefe"]
+          remaining = [value for value in forbidden if value in html]
+          if remaining:
+              raise SystemExit(f"Botswana details still present: {remaining}")
+
+          page.write_text(html, encoding="utf-8")
+
+          # Delete this one-time workflow after it has completed its job.
+          Path(".github/workflows/remove-botswana.yml").unlink()
+
+      - name: Commit directly to main
+        run: |
+          git config user.name "ChatGPT"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html .github/workflows/remove-botswana.yml
+          git commit -m "remove Botswana contact details"
+          git push origin HEAD:main
